@@ -11,22 +11,46 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize GoogleGenAI with Server-Side API Key and standard User-Agent for AI Studio Build
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = apiKey
-  ? new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
+// Dynamically retrieve GoogleGenAI client using process.env.GEMINI_API_KEY
+function getAIClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
       },
-    })
-  : null;
+    },
+  });
+}
+
+// Helper to attempt generation with model fallback (gemini-3.6-flash -> gemini-2.5-flash -> gemini-1.5-flash)
+async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
+  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+  let lastError: any = null;
+
+  for (const modelName of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        ...configObj,
+        model: modelName,
+      });
+      if (response && response.text) {
+        return response;
+      }
+    } catch (err: any) {
+      console.warn(`Model [${modelName}] failed, trying fallback:`, err?.message || err);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("AIモデルからの応答取得に失敗しました。");
+}
 
 // API Route for Meal Plan generation
 app.post("/api/generate-plan", async (req, res) => {
   try {
+    const ai = getAIClient();
     if (!ai) {
       return res.status(500).json({
         error: "GEMINI_API_KEYが設定されていません。AI StudioのSettings > Secretsで設定してください。",
@@ -70,8 +94,7 @@ ${additionalNotes || "特になし"}
 - 栄養価（カロリー、タンパク質、炭水化物、脂質）を推定して含めてください。
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: prompt,
       config: {
         systemInstruction: "あなたは親切でプロフェッショナルな管理栄養士です。指定された形式のJSONデータのみを返してください。マークダウンの囲みや余計なテキストは含めないでください。",
@@ -194,6 +217,7 @@ ${additionalNotes || "特になし"}
 // API Route for Recipe & Cooking Assistant Chat
 app.post("/api/chat", async (req, res) => {
   try {
+    const ai = getAIClient();
     if (!ai) {
       return res.status(500).json({
         error: "GEMINI_API_KEYが設定されていません。AI StudioのSettings > Secretsで設定してください。",
@@ -259,8 +283,7 @@ ${contextText}
       parts: [{ text: message }],
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+    const response = await generateContentWithFallback(ai, {
       contents,
       config: {
         systemInstruction,

@@ -94,7 +94,7 @@ export default function IngredientSelector({
         ) : (
           <div className="flex flex-wrap gap-2">
             <AnimatePresence>
-              {ingredients.map((ing) => (
+              {ingredients.map((ing, idx) => (
                 <motion.span
                   key={ing}
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -107,7 +107,7 @@ export default function IngredientSelector({
                     type="button"
                     onClick={() => onRemove(ing)}
                     className="p-0.5 rounded-full hover:bg-emerald-100 text-emerald-600 transition-colors"
-                    id={`btn-remove-ing-${ing}`}
+                    id={`btn-remove-ing-${idx}`}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -124,7 +124,7 @@ export default function IngredientSelector({
           よく使う食材（クイック追加）
         </h3>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          {POPULAR_INGREDIENTS.map((item) => {
+          {POPULAR_INGREDIENTS.map((item, idx) => {
             const isAdded = ingredients.includes(item.name);
             const Icon = item.icon;
             return (
@@ -138,7 +138,7 @@ export default function IngredientSelector({
                     ? "bg-stone-50 border-stone-100 text-stone-300 pointer-events-none"
                     : `${item.bg} border-transparent shadow-sm hover:translate-y-[-1px]`
                 }`}
-                id={`btn-quick-${item.name}`}
+                id={`btn-quick-${idx}`}
               >
                 <Icon className={`w-4 h-4 ${isAdded ? "text-stone-300" : ""}`} />
                 <span>{item.name}</span>
