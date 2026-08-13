@@ -147,15 +147,46 @@ ${additionalNotes || "特になし"}
 
     const responseText = response.text;
     if (!responseText) {
-      throw new Error("AIからの応答が空でした。");
+      return res.status(500).json({
+        error: "AIからの応答が空でした。『AIに献立を考えてもらう』ボタンを押して再試行してください。",
+      });
     }
 
-    const data = JSON.parse(responseText.trim());
+    let cleanJson = responseText.trim();
+
+    // Strip markdown fences if present
+    if (cleanJson.includes("```")) {
+      cleanJson = cleanJson.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+    }
+
+    // Isolate outer JSON object structure if text prefix/suffix exists
+    const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanJson = jsonMatch[0];
+    }
+
+    let data;
+    try {
+      data = JSON.parse(cleanJson);
+    } catch (parseError: any) {
+      console.error("JSON parse failed. Raw response:", responseText);
+      return res.status(500).json({
+        error: "AIの生成結果が期待される形式と一致しませんでした。一時的な不整合の可能性があります。お手数ですが『AIに献立を考えてもらう』ボタンを再度押して再試行してください。",
+      });
+    }
+
+    // Verify minimum expected fields
+    if (!data || typeof data !== "object" || !data.title || !Array.isArray(data.recipes) || data.recipes.length === 0) {
+      return res.status(500).json({
+        error: "AIの生成結果に必要なレシピデータが含まれていませんでした。恐れ入りますが『AIに献立を考えてもらう』ボタンを再度押して再試行してください。",
+      });
+    }
+
     return res.json(data);
   } catch (error: any) {
     console.error("Meal generation error:", error);
     return res.status(500).json({
-      error: "献立の作成中にエラーが発生しました。詳細: " + (error.message || error),
+      error: "献立の作成中にエラーが発生しました。お手数ですが再試行してください。 (詳細: " + (error.message || error) + ")",
     });
   }
 });

@@ -11,6 +11,7 @@ import {
   DollarSign,
   AlertCircle,
   TrendingUp,
+  RotateCcw,
   Globe,
   Leaf,
   Home,
@@ -66,8 +67,12 @@ export default function App() {
 
   // State for input ingredients
   const [ingredients, setIngredients] = useState<string[]>(() => {
-    const saved = localStorage.getItem("ai_menu_ingredients");
-    return saved ? JSON.parse(saved) : ["豚肉", "キャベツ", "玉ねぎ"];
+    try {
+      const saved = localStorage.getItem("ai_menu_ingredients");
+      return saved ? JSON.parse(saved) : ["豚肉", "キャベツ", "玉ねぎ"];
+    } catch {
+      return ["豚肉", "キャベツ", "玉ねぎ"];
+    }
   });
 
   // State for generator config
@@ -88,26 +93,42 @@ export default function App() {
 
   // Loaded/Active meal plan
   const [activePlan, setActivePlan] = useState<MealPlan | null>(() => {
-    const saved = localStorage.getItem("ai_menu_active_plan");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("ai_menu_active_plan");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   // History list of meal plans
   const [historyPlans, setHistoryPlans] = useState<MealPlan[]>(() => {
-    const saved = localStorage.getItem("ai_menu_history");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ai_menu_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   // Persistent shopping list
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(() => {
-    const saved = localStorage.getItem("ai_menu_shopping_list");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ai_menu_shopping_list");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   // Saved named shopping lists
   const [savedShoppingLists, setSavedShoppingLists] = useState<SavedShoppingList[]>(() => {
-    const saved = localStorage.getItem("ai_menu_saved_shopping_lists");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("ai_menu_saved_shopping_lists");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   // Sync state to local storage
@@ -194,12 +215,32 @@ export default function App() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "献立の生成中に通信エラーが発生しました。");
+      let responseText = "";
+      try {
+        responseText = await response.text();
+      } catch (readErr) {
+        throw new Error("サーバーからの応答読み込みに失敗しました。通信環境を確認し、もう一度お試しください。");
       }
 
-      const data = await response.json();
+      let data: any = null;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonErr) {
+        console.error("Client JSON parse error:", jsonErr, "Response text:", responseText);
+        throw new Error(
+          "AI応答データの形式解析エラーが発生しました。一時的な不整合の可能性があります。下の『再試行する』ボタンを押してもう一度お試しください。"
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || "献立の生成中に通信エラーが発生しました。もう一度お試しください。");
+      }
+
+      if (!data || !data.title || !Array.isArray(data.recipes) || data.recipes.length === 0) {
+        throw new Error(
+          "生成された献立データに必要な情報が含まれていませんでした。もう一度『再試行する』をお試しください。"
+        );
+      }
 
       // Create a unique MealPlan ID
       const planId = "plan-" + Date.now();
@@ -248,8 +289,12 @@ export default function App() {
       setShoppingList(generatedShoppingItems);
       setHistoryPlans((prev) => [newPlan, ...prev]);
     } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || "予期しないエラーが発生しました。");
+      console.error("Meal Plan Generation Error:", err);
+      let userMsg = err.message || "予期しないエラーが発生しました。もう一度お試しください。";
+      if (userMsg.includes("pattern") || userMsg.includes("JSON") || userMsg.includes("Unexpected token")) {
+        userMsg = "AI応答データのフォーマット解析で一時的なエラーが発生しました。お手数ですが、下の『再試行する』ボタンを押してもう一度お試しください。";
+      }
+      setErrorMessage(userMsg);
     } finally {
       setLoading(false);
     }
@@ -643,13 +688,33 @@ export default function App() {
 
             {/* Output Presentation Panel (Col span 7 on desktop) */}
             <div className="lg:col-span-7 space-y-6">
-              {/* Error Notification */}
+              {/* Error Notification with Retry Action */}
               {errorMessage && (
-                <div className="bg-rose-50 border border-rose-200/60 rounded-2xl p-4 text-rose-800 text-sm flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">生成中にエラーが発生しました</p>
-                    <p className="text-xs text-rose-700 mt-1 leading-relaxed">{errorMessage}</p>
+                <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-5 text-rose-900 text-sm shadow-sm space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-bold text-rose-900">献立の作成中にエラーが発生しました</p>
+                      <p className="text-xs text-rose-700 mt-1 leading-relaxed">{errorMessage}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 border-t border-rose-200/50 justify-end">
+                    <button
+                      onClick={() => setErrorMessage(null)}
+                      className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200/80 text-rose-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      id="btn-dismiss-error"
+                    >
+                      閉じる
+                    </button>
+                    <button
+                      onClick={handleGeneratePlan}
+                      disabled={loading || ingredients.length === 0}
+                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                      id="btn-retry-generation"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>もう一度試す (再試行)</span>
+                    </button>
                   </div>
                 </div>
               )}
