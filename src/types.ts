@@ -46,3 +46,11 @@ export interface MealPlan {
   recipes: Recipe[];
   shoppingList: ShoppingItem[];
 }
+
+export interface SavedShoppingList {
+  id: string;
+  title: string;
+  createdAt: string;
+  items: ShoppingItem[];
+}
+

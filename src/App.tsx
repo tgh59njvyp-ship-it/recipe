@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { Ingredient, MealPlan, ShoppingItem, Recipe } from "./types";
+import { Ingredient, MealPlan, ShoppingItem, Recipe, SavedShoppingList } from "./types";
 import IngredientSelector from "./components/IngredientSelector";
 import MealPlanCard from "./components/MealPlanCard";
 import ShoppingList from "./components/ShoppingList";
@@ -104,6 +104,12 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Saved named shopping lists
+  const [savedShoppingLists, setSavedShoppingLists] = useState<SavedShoppingList[]>(() => {
+    const saved = localStorage.getItem("ai_menu_saved_shopping_lists");
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Sync state to local storage
   useEffect(() => {
     localStorage.setItem("ai_menu_ingredients", JSON.stringify(ingredients));
@@ -120,6 +126,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("ai_menu_shopping_list", JSON.stringify(shoppingList));
   }, [shoppingList]);
+
+  useEffect(() => {
+    localStorage.setItem("ai_menu_saved_shopping_lists", JSON.stringify(savedShoppingLists));
+  }, [savedShoppingLists]);
 
   // Loading animation messages rotating
   useEffect(() => {
@@ -220,7 +230,7 @@ export default function App() {
             ) || !ing.isMissing;
 
             generatedShoppingItems.push({
-              id: `shop-${planId}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `shop-${planId}-${Math.random().toString(36).substring(2, 9)}`,
               name: ing.name,
               quantity: ing.quantity,
               category: ing.category,
@@ -254,7 +264,7 @@ export default function App() {
 
   const handleAddCustomShoppingItem = (name: string, quantity: string, category: string) => {
     const newItem: ShoppingItem = {
-      id: `custom-shop-${Date.now()}`,
+      id: `custom-shop-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name,
       quantity,
       category,
@@ -270,6 +280,28 @@ export default function App() {
 
   const handleClearCompletedShopping = () => {
     setShoppingList(shoppingList.filter((item) => !item.completed));
+  };
+
+  const handleSaveCurrentList = (title: string) => {
+    const newList: SavedShoppingList = {
+      id: "saved-shop-" + Date.now(),
+      title,
+      createdAt: new Date().toISOString(),
+      items: [...shoppingList],
+    };
+    setSavedShoppingLists((prev) => [newList, ...prev]);
+  };
+
+  const handleLoadSavedList = (savedList: SavedShoppingList) => {
+    setShoppingList([...savedList.items]);
+  };
+
+  const handleDeleteSavedList = (id: string) => {
+    setSavedShoppingLists((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const handleCreateBlankList = () => {
+    setShoppingList([]);
   };
 
   // History Interactions
@@ -681,10 +713,15 @@ export default function App() {
                     <MealPlanCard mealPlan={activePlan} />
                     <ShoppingList
                       shoppingList={shoppingList}
+                      savedLists={savedShoppingLists}
                       onToggleItem={handleToggleShoppingItem}
                       onAddItem={handleAddCustomShoppingItem}
                       onRemoveItem={handleRemoveShoppingItem}
                       onClearCompleted={handleClearCompletedShopping}
+                      onSaveCurrentList={handleSaveCurrentList}
+                      onLoadSavedList={handleLoadSavedList}
+                      onDeleteSavedList={handleDeleteSavedList}
+                      onCreateBlankList={handleCreateBlankList}
                     />
                   </motion.div>
                 ) : (
@@ -726,10 +763,15 @@ export default function App() {
 
             <ShoppingList
               shoppingList={shoppingList}
+              savedLists={savedShoppingLists}
               onToggleItem={handleToggleShoppingItem}
               onAddItem={handleAddCustomShoppingItem}
               onRemoveItem={handleRemoveShoppingItem}
               onClearCompleted={handleClearCompletedShopping}
+              onSaveCurrentList={handleSaveCurrentList}
+              onLoadSavedList={handleLoadSavedList}
+              onDeleteSavedList={handleDeleteSavedList}
+              onCreateBlankList={handleCreateBlankList}
             />
           </div>
         )}
