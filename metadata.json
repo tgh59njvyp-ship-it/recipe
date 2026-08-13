@@ -1,0 +1,6 @@
+{
+  "name": "AI献立ジェネレーター",
+  "description": "使いたい食材を入れるだけで、AIが自動で献立と買い出しリストを作成・管理してくれるアプリ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
