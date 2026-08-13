@@ -221,27 +221,64 @@ export default function ShoppingList({
 
   const handleNativeShare = async () => {
     const activeItems = shoppingList.filter((item) => !item.completed);
-    if (activeItems.length === 0) {
-      alert("共有する未購入のアイテムがありません。");
+    const targetItems = activeItems.length > 0 ? activeItems : shoppingList;
+
+    if (targetItems.length === 0) {
+      alert("共有する買い出しアイテムがありません。");
       return;
     }
 
-    const text =
-      "■ 買い出しリスト\n" +
-      activeItems.map((i) => `・${i.name} (${i.quantity})`).join("\n");
+    // Group items by category for formatted output
+    const grouped = targetItems.reduce<Record<string, ShoppingItem[]>>((acc, item) => {
+      const cat = CATEGORY_MAP[item.category] || item.category || "その他";
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(item);
+      return acc;
+    }, {});
+
+    const todayStr = new Date().toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+    let shareText = `🛒 買い出しリスト (${todayStr})\n`;
+
+    for (const [cat, items] of Object.entries(grouped)) {
+      shareText += `\n【${cat}】\n`;
+      items.forEach((i) => {
+        shareText += `・${i.name} (${i.quantity})\n`;
+      });
+    }
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "買い出しリスト",
-          text: text,
+          title: `買い物リスト (${todayStr})`,
+          text: shareText,
         });
         setShowShareMenu(false);
-      } catch (err) {
-        // Silently ignore share cancellation or error
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.log("Web Share error, falling back to copy", err);
+          handleCopyFormat("line", true);
+        }
       }
     } else {
-      handleCopyFormat("line", true);
+      // Fallback for unsupported browsers
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(shareText);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = shareText;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+        }
+        setCopiedMessage("リストをコピーしました！");
+        setTimeout(() => setCopiedMessage(null), 2500);
+      } catch (e) {
+        alert("クリップボードへのコピーに失敗しました。");
+      }
     }
   };
 
@@ -310,23 +347,36 @@ export default function ShoppingList({
             </button>
           )}
 
-          {/* Share & Copy Button */}
+          {/* Direct App Share Button (Web Share API) */}
+          {totalItems > 0 && (
+            <button
+              onClick={handleNativeShare}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+              id="btn-direct-app-share"
+              title="Web Share APIを利用してLINEやメール、メモ等に共有"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>LINE・メール等に共有</span>
+            </button>
+          )}
+
+          {/* Share & Copy Formats Dropdown */}
           {totalItems > 0 && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowShareMenu((prev) => !prev)}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 id="btn-share-shopping-menu"
               >
                 {copiedMessage ? (
                   <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{copiedMessage}</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">{copiedMessage}</span>
                   </>
                 ) : (
                   <>
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>共有・コピー</span>
+                    <FileText className="w-3.5 h-3.5 text-stone-500" />
+                    <span>形式指定コピー</span>
                   </>
                 )}
               </button>
@@ -341,19 +391,31 @@ export default function ShoppingList({
                 >
                   <div className="px-3 py-1.5 border-b border-stone-100">
                     <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                      共有・コピー形式を選択
+                      共有・コピー方法を選択
                     </span>
                   </div>
 
                   <button
+                    onClick={handleNativeShare}
+                    className="w-full px-4 py-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100/80 flex items-center gap-2.5 transition-colors cursor-pointer border-b border-stone-100"
+                    id="btn-menu-native-share"
+                  >
+                    <Share2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold">アプリへ共有 (LINE / メール / メモ)</p>
+                      <p className="text-[10px] text-emerald-600/80">Web Share機能を使って他アプリを起動</p>
+                    </div>
+                  </button>
+
+                  <button
                     onClick={() => handleCopyFormat("line", true)}
-                    className="w-full px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    className="w-full px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 hover:text-emerald-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                     id="btn-copy-line"
                   >
                     <span className="text-base">📱</span>
                     <div>
-                      <p className="font-bold">LINE・チャット用</p>
-                      <p className="text-[10px] text-stone-400">未購入品をカテゴリ別に絵文字付きでコピー</p>
+                      <p className="font-bold">LINE・チャット用テキストコピー</p>
+                      <p className="text-[10px] text-stone-400">カテゴリ別の絵文字付きテキスト</p>
                     </div>
                   </button>
 
