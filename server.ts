@@ -11,9 +11,9 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Dynamically retrieve GoogleGenAI client using process.env.GEMINI_API_KEY
-function getAIClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+// Dynamically retrieve GoogleGenAI client using request header/body or process.env.GEMINI_API_KEY
+function getAIClient(clientApiKey?: string) {
+  const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
   return new GoogleGenAI({
     apiKey,
@@ -50,10 +50,12 @@ async function generateContentWithFallback(ai: GoogleGenAI, configObj: { content
 // API Route for Meal Plan generation
 app.post("/api/generate-plan", async (req, res) => {
   try {
-    const ai = getAIClient();
+    const clientApiKey = (req.headers["x-api-key"] as string) || req.body?.apiKey;
+    const ai = getAIClient(clientApiKey);
     if (!ai) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEYが設定されていません。AI StudioのSettings > Secretsで設定してください。",
+      return res.status(401).json({
+        error: "Gemini APIキーが設定されていません。ヘッダーの『🔑 APIキー設定』ボタンからGoogle Gemini APIキーを設定してください（Google AI Studioで無料取得できます）。",
+        requiresApiKey: true,
       });
     }
 
@@ -217,10 +219,12 @@ ${additionalNotes || "特になし"}
 // API Route for Recipe & Cooking Assistant Chat
 app.post("/api/chat", async (req, res) => {
   try {
-    const ai = getAIClient();
+    const clientApiKey = (req.headers["x-api-key"] as string) || req.body?.apiKey;
+    const ai = getAIClient(clientApiKey);
     if (!ai) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEYが設定されていません。AI StudioのSettings > Secretsで設定してください。",
+      return res.status(401).json({
+        error: "Gemini APIキーが設定されていません。画面右上『🔑 APIキー設定』ボタンからGoogle Gemini APIキーを入力してください。",
+        requiresApiKey: true,
       });
     }
 

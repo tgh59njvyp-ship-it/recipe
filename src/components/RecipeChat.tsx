@@ -13,6 +13,7 @@ import {
   Check,
   ChefHat,
   Lightbulb,
+  Key,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Recipe, MealPlan } from "../types";
@@ -31,6 +32,7 @@ interface RecipeChatProps {
   isOpen: boolean;
   onClose: () => void;
   onOpen: () => void;
+  onOpenApiKeyModal?: () => void;
 }
 
 const QUICK_PROMPTS = [
@@ -48,6 +50,7 @@ export const RecipeChat: React.FC<RecipeChatProps> = ({
   isOpen,
   onClose,
   onOpen,
+  onOpenApiKeyModal,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -113,9 +116,13 @@ export const RecipeChat: React.FC<RecipeChatProps> = ({
       }
 
       // API call to backend
+      const customApiKey = localStorage.getItem("gemini_api_key") || "";
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-api-key": customApiKey } : {}),
+        },
         body: JSON.stringify({
           message: query.trim(),
           history: messages.map((m) => ({
@@ -128,6 +135,9 @@ export const RecipeChat: React.FC<RecipeChatProps> = ({
 
       if (!res.ok) {
         const errData = await res.json();
+        if (errData?.requiresApiKey && onOpenApiKeyModal) {
+          onOpenApiKeyModal();
+        }
         throw new Error(errData.error || "通信エラーが発生しました");
       }
 
@@ -261,6 +271,16 @@ export const RecipeChat: React.FC<RecipeChatProps> = ({
               </div>
 
               <div className="flex items-center gap-1">
+                {onOpenApiKeyModal && (
+                  <button
+                    onClick={onOpenApiKeyModal}
+                    className="p-2 hover:bg-white/10 text-emerald-100 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    title="Gemini APIキー設定"
+                    id="btn-chat-apikey"
+                  >
+                    <Key className="w-4 h-4 text-amber-300" />
+                  </button>
+                )}
                 <button
                   onClick={handleClear}
                   className="p-2 hover:bg-white/10 text-emerald-100 hover:text-white rounded-lg transition-colors cursor-pointer"

@@ -17,6 +17,7 @@ import {
   Home,
   History as HistoryIcon,
   Bot,
+  Key,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -27,6 +28,7 @@ import ShoppingList from "./components/ShoppingList";
 import HistoryList from "./components/HistoryList";
 import { RecipeChat } from "./components/RecipeChat";
 import { HomeDashboard } from "./components/HomeDashboard";
+import { ApiKeyModal } from "./components/ApiKeyModal";
 
 const DIETARY_TAGS = [
   { id: "quick", label: "時短 (15分以内)", icon: Zap, bg: "hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200" },
@@ -88,8 +90,10 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Chat Drawer state
+  // Chat Drawer state & API Key Modal state
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [hasCustomApiKey, setHasCustomApiKey] = useState(() => !!localStorage.getItem("gemini_api_key"));
 
   // Loaded/Active meal plan
   const [activePlan, setActivePlan] = useState<MealPlan | null>(() => {
@@ -202,9 +206,13 @@ export default function App() {
     setErrorMessage(null);
 
     try {
+      const customApiKey = localStorage.getItem("gemini_api_key") || "";
       const response = await fetch("/api/generate-plan", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(customApiKey ? { "x-api-key": customApiKey } : {}),
+        },
         body: JSON.stringify({
           availableIngredients: ingredients,
           dietaryRestrictions: [...selectedTags, ...selectedDietary],
@@ -233,6 +241,9 @@ export default function App() {
       }
 
       if (!response.ok) {
+        if (data?.requiresApiKey || response.status === 401) {
+          setIsApiKeyModalOpen(true);
+        }
         throw new Error(data?.error || "献立の生成中に通信エラーが発生しました。もう一度お試しください。");
       }
 
@@ -470,6 +481,15 @@ export default function App() {
 
           <div className="hidden sm:flex items-center gap-2">
             <button
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              id="btn-header-apikey"
+              title="Gemini APIキー設定"
+            >
+              <Key className="w-3.5 h-3.5 text-amber-600" />
+              <span>{hasCustomApiKey ? "APIキー設定済み" : "🔑 APIキー設定"}</span>
+            </button>
+            <button
               onClick={() => setIsChatOpen(true)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
               id="btn-header-open-chat"
@@ -698,7 +718,15 @@ export default function App() {
                       <p className="text-xs text-rose-700 mt-1 leading-relaxed">{errorMessage}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1 border-t border-rose-200/50 justify-end">
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-200/50 justify-end">
+                    <button
+                      onClick={() => setIsApiKeyModalOpen(true)}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                      id="btn-error-setup-apikey"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>🔑 APIキーを設定する</span>
+                    </button>
                     <button
                       onClick={() => setErrorMessage(null)}
                       className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200/80 text-rose-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
@@ -879,6 +907,14 @@ export default function App() {
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         onOpen={() => setIsChatOpen(true)}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+      />
+
+      {/* Gemini API Key Modal */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onSaved={() => setHasCustomApiKey(!!localStorage.getItem("gemini_api_key"))}
       />
     </div>
   );
