@@ -71,7 +71,7 @@ ${additionalNotes || "特になし"}
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         systemInstruction: "あなたは親切でプロフェッショナルな管理栄養士です。指定された形式のJSONデータのみを返してください。マークダウンの囲みや余計なテキストは含めないでください。",
@@ -260,7 +260,7 @@ ${contextText}
     });
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents,
       config: {
         systemInstruction,
