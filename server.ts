@@ -25,9 +25,9 @@ function getAIClient(clientApiKey?: string) {
   });
 }
 
-// Helper to attempt generation with model fallback (gemini-3.6-flash -> gemini-2.5-flash -> gemini-1.5-flash)
+// Helper to attempt generation with valid modern Gemini models
 async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
-  const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+  const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
   let lastError: any = null;
 
   for (const modelName of candidateModels) {
