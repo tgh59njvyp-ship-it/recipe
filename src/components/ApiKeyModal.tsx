@@ -80,7 +80,10 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSav
             <span>✨</span> 共有URLやWeb公開先で自由にお使いいただけます
           </p>
           <p className="text-emerald-700/90">
-            Google AI StudioのAPIキーを入力すると、このブラウザ（localStorage）にのみ安全に保持され、公開サイト上でも制限なくAI献立が生成できるようになります。
+            Google AI StudioのAPIキーを入力すると、この端末のブラウザ（localStorage）に安全に保存され、公開サイト上でも制限なくAI献立が生成できるようになります。
+          </p>
+          <p className="text-[11px] text-emerald-800/80 bg-emerald-100/50 p-2 rounded-xl">
+            💡 <strong>APIキーの形式:</strong> <code>AIzaSy...</code> で始まる文字列です（Google AI Studioで無料・1分で発行できます）。
           </p>
           <a
             href="https://aistudio.google.com/app/apikey"
@@ -88,7 +91,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSav
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-emerald-700 font-bold underline hover:text-emerald-900 pt-1"
           >
-            <span>Google AI Studioで無料APIキーを取得する</span>
+            <span>Google AI Studioで無料APIキーを取得する（無料）</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>

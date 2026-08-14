@@ -23,17 +23,12 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Dynamically retrieve GoogleGenAI client using request header/body or process.env.GEMINI_API_KEY or embedded fallback key
-const DEFAULT_FALLBACK_KEY = Buffer.from(
-  "QVEuQWI4Uk42TE9LSnp0VnBMVVlfandoc0wxUl92Y2M3ODRxeS1BSGxIdW1yN1JCZ0FockE=",
-  "base64"
-).toString("utf-8");
-
 function getAIClient(clientApiKey?: string) {
-  const trimmed = clientApiKey?.trim();
-  const apiKey = (trimmed && trimmed.length > 10)
-    ? trimmed
-    : (process.env.GEMINI_API_KEY?.trim() || DEFAULT_FALLBACK_KEY);
+  const trimmedClient = clientApiKey?.trim();
+  const envKey = process.env.GEMINI_API_KEY?.trim();
+  
+  // Prefer valid client-provided key or environment variable
+  const apiKey = (trimmedClient && trimmedClient.length > 10) ? trimmedClient : envKey;
   if (!apiKey) return null;
 
   return new GoogleGenAI({
@@ -48,10 +43,11 @@ app.get("/api/health", (req, res) => {
 
 // Helper to attempt generation with valid modern Gemini models and automatic schema fallbacks
 async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
-  const candidateModels = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+  // Ordered by reliability and speed under high traffic
+  const candidateModels = ["gemini-2.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
   let lastError: any = null;
 
-  // First pass: try with structured output schema
+  // First pass: try with structured output schema across available models
   for (const modelName of candidateModels) {
     try {
       const response = await ai.models.generateContent({
@@ -64,6 +60,7 @@ async function generateContentWithFallback(ai: GoogleGenAI, configObj: { content
     } catch (err: any) {
       console.warn(`Model [${modelName}] failed with schema:`, err?.message || err);
       lastError = err;
+      // If 503 (high demand) or rate limit, continue immediately to the next candidate model
     }
   }
 
@@ -299,8 +296,15 @@ ${additionalNotes || "特になし"}
     return res.json(data);
   } catch (error: any) {
     console.error("Meal generation error:", error);
+    const msg = error?.message || String(error);
+    if (msg.includes("401") || msg.includes("UNAUTHENTICATED") || msg.includes("authentication credential") || msg.includes("ACCESS_TOKEN")) {
+      return res.status(401).json({
+        requiresApiKey: true,
+        error: "Gemini APIキーの認証に失敗しました。画面右上の『🔑 APIキー設定』から、Google AI Studioで取得した有効なAPIキー（AIzaSy...）を設定してください。",
+      });
+    }
     return res.status(500).json({
-      error: "献立の作成中にエラーが発生しました。お手数ですが再試行してください。 (詳細: " + (error.message || error) + ")",
+      error: "献立の作成中にエラーが発生しました。お手数ですが再試行してください。 (詳細: " + msg + ")",
     });
   }
 });
@@ -387,8 +391,15 @@ ${contextText}
     return res.json({ reply });
   } catch (error: any) {
     console.error("Chat API Error:", error);
+    const msg = error?.message || String(error);
+    if (msg.includes("401") || msg.includes("UNAUTHENTICATED") || msg.includes("authentication credential") || msg.includes("ACCESS_TOKEN")) {
+      return res.status(401).json({
+        requiresApiKey: true,
+        error: "Gemini APIキーの認証に失敗しました。画面右上の『🔑 APIキー設定』から、Google AI Studioで取得した有効なAPIキーを設定してください。",
+      });
+    }
     return res.status(500).json({
-      error: "回答の取得中にエラーが発生しました。詳細: " + (error.message || error),
+      error: "回答の取得中にエラーが発生しました。詳細: " + msg,
     });
   }
 });

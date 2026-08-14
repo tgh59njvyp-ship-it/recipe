@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Recipe, MealPlan } from "../types";
+import { askChefChat } from "../services/geminiService";
 
 interface Message {
   id: string;
@@ -115,38 +116,22 @@ export const RecipeChat: React.FC<RecipeChatProps> = ({
         }
       }
 
-      // API call to backend
+      // Call AI Chat service (handles server endpoint with direct fallback)
       const customApiKey = localStorage.getItem("gemini_api_key") || "";
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(customApiKey ? { "x-api-key": customApiKey } : {}),
-        },
-        body: JSON.stringify({
-          message: query.trim(),
-          history: messages.map((m) => ({
-            role: m.sender === "user" ? "user" : "model",
-            text: m.text,
-          })),
-          context: contextData,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        if (errData?.requiresApiKey && onOpenApiKeyModal) {
-          onOpenApiKeyModal();
-        }
-        throw new Error(errData.error || "通信エラーが発生しました");
-      }
-
-      const data = await res.json();
+      const reply = await askChefChat(
+        query.trim(),
+        messages.map((m) => ({
+          role: m.sender === "user" ? ("user" as const) : ("model" as const),
+          parts: m.text,
+        })),
+        currentMealPlan,
+        customApiKey
+      );
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: "assistant",
-        text: data.reply,
+        text: reply,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 

@@ -29,6 +29,7 @@ import HistoryList from "./components/HistoryList";
 import { RecipeChat } from "./components/RecipeChat";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ApiKeyModal } from "./components/ApiKeyModal";
+import { generateMealPlan } from "./services/geminiService";
 
 const DIETARY_TAGS = [
   { id: "quick", label: "時短 (15分以内)", icon: Zap, bg: "hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200" },
@@ -207,48 +208,15 @@ export default function App() {
 
     try {
       const customApiKey = localStorage.getItem("gemini_api_key") || "";
-      const response = await fetch("/api/generate-plan", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(customApiKey ? { "x-api-key": customApiKey } : {}),
-        },
-        body: JSON.stringify({
-          availableIngredients: ingredients,
-          dietaryRestrictions: [...selectedTags, ...selectedDietary],
-          cookingStyle: selectedStyle,
-          mealCount,
-          mealType,
-          additionalNotes,
-        }),
+      const data = await generateMealPlan({
+        availableIngredients: ingredients,
+        dietaryRestrictions: [...selectedTags, ...selectedDietary],
+        cookingStyle: selectedStyle,
+        mealCount,
+        mealType,
+        additionalNotes,
+        apiKey: customApiKey,
       });
-
-      let responseText = "";
-      try {
-        responseText = await response.text();
-      } catch (readErr) {
-        throw new Error("サーバーからの応答読み込みに失敗しました。通信環境を確認し、もう一度お試しください。");
-      }
-
-      let data: any = null;
-      try {
-        data = JSON.parse(responseText);
-      } catch (jsonErr) {
-        console.error("Client JSON parse error:", jsonErr, "Response text:", responseText);
-        if (!response.ok) {
-          throw new Error(`サーバーエラー (${response.status}) が発生しました。しばらく待ってから再試行してください。`);
-        }
-        throw new Error(
-          "AI応答データの形式解析エラーが発生しました。一時的な不整合の可能性があります。下の『再試行する』ボタンを押してもう一度お試しください。"
-        );
-      }
-
-      if (!response.ok) {
-        if (data?.requiresApiKey || response.status === 401) {
-          setIsApiKeyModalOpen(true);
-        }
-        throw new Error(data?.error || `通信エラー (${response.status}) が発生しました。もう一度お試しください。`);
-      }
 
       if (!data || !data.title || !Array.isArray(data.recipes) || data.recipes.length === 0) {
         throw new Error(
@@ -304,6 +272,9 @@ export default function App() {
       setHistoryPlans((prev) => [newPlan, ...prev]);
     } catch (err: any) {
       console.error("Meal Plan Generation Error:", err);
+      if (err?.requiresApiKey || err?.message?.includes("APIキー") || err?.message?.includes("401") || err?.message?.includes("UNAUTHENTICATED")) {
+        setIsApiKeyModalOpen(true);
+      }
       let userMsg = err.message || "予期しないエラーが発生しました。もう一度お試しください。";
       if (userMsg.includes("pattern") || userMsg.includes("JSON") || userMsg.includes("Unexpected token")) {
         userMsg = "AI応答データのフォーマット解析で一時的なエラーが発生しました。お手数ですが、下の『再試行する』ボタンを押してもう一度お試しください。";
