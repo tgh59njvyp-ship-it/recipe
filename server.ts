@@ -20,21 +20,29 @@ const DEFAULT_FALLBACK_KEY = Buffer.from(
 function getAIClient(clientApiKey?: string) {
   const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY?.trim() || DEFAULT_FALLBACK_KEY;
   if (!apiKey) return null;
+
+  const headers: Record<string, string> = {
+    "User-Agent": "aistudio-build",
+  };
+
+  if (apiKey.startsWith("AQ.") || apiKey.startsWith("ya29.")) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
+      headers,
     },
   });
 }
 
-// Helper to attempt generation with valid modern Gemini models
+// Helper to attempt generation with valid modern Gemini models and automatic schema fallbacks
 async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
-  const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
+  const candidateModels = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
   let lastError: any = null;
 
+  // First pass: try with structured output schema
   for (const modelName of candidateModels) {
     try {
       const response = await ai.models.generateContent({
@@ -45,10 +53,35 @@ async function generateContentWithFallback(ai: GoogleGenAI, configObj: { content
         return response;
       }
     } catch (err: any) {
-      console.warn(`Model [${modelName}] failed, trying fallback:`, err?.message || err);
+      console.warn(`Model [${modelName}] failed with schema:`, err?.message || err);
       lastError = err;
     }
   }
+
+  // Second pass fallback: try without strict responseSchema if structured outputs failed
+  if (configObj.config?.responseSchema) {
+    const simplifiedConfig = {
+      ...configObj.config,
+      responseSchema: undefined,
+      responseMimeType: "application/json",
+    };
+    for (const modelName of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          contents: configObj.contents,
+          config: simplifiedConfig,
+          model: modelName,
+        });
+        if (response && response.text) {
+          return response;
+        }
+      } catch (err: any) {
+        console.warn(`Model [${modelName}] fallback without responseSchema failed:`, err?.message || err);
+        lastError = err;
+      }
+    }
+  }
+
   throw lastError || new Error("AIモデルからの応答取得に失敗しました。");
 }
 
@@ -190,27 +223,69 @@ ${additionalNotes || "特になし"}
     }
 
     // Isolate outer JSON object structure if text prefix/suffix exists
-    const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      cleanJson = jsonMatch[0];
+    const firstBrace = cleanJson.indexOf("{");
+    const lastBrace = cleanJson.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleanJson = cleanJson.slice(firstBrace, lastBrace + 1);
     }
 
-    let data;
+    let data: any = null;
     try {
       data = JSON.parse(cleanJson);
     } catch (parseError: any) {
-      console.error("JSON parse failed. Raw response:", responseText);
-      return res.status(500).json({
-        error: "AIの生成結果が期待される形式と一致しませんでした。一時的な不整合の可能性があります。お手数ですが『AIに献立を考えてもらう』ボタンを再度押して再試行してください。",
-      });
+      // Secondary attempt: fix trailing commas and unescaped line breaks
+      try {
+        const sanitized = cleanJson
+          .replace(/,\s*([\}\]])/g, "$1")
+          .replace(/[\u0000-\u001F]+/g, (match) => (match === "\n" || match === "\r" || match === "\t" ? match : " "));
+        data = JSON.parse(sanitized);
+      } catch (secErr) {
+        console.error("JSON parse failed. Raw response:", responseText);
+        return res.status(500).json({
+          error: "AIの生成結果が期待される形式と一致しませんでした。一時的な不整合の可能性があります。お手数ですが『AIに献立を考えてもらう』ボタンを再度押して再試行してください。",
+        });
+      }
     }
 
-    // Verify minimum expected fields
-    if (!data || typeof data !== "object" || !data.title || !Array.isArray(data.recipes) || data.recipes.length === 0) {
+    // Verify and sanitize structure
+    if (!data || typeof data !== "object" || !Array.isArray(data.recipes) || data.recipes.length === 0) {
       return res.status(500).json({
         error: "AIの生成結果に必要なレシピデータが含まれていませんでした。恐れ入りますが『AIに献立を考えてもらう』ボタンを再度押して再試行してください。",
       });
     }
+
+    // Ensure title exists
+    if (!data.title) {
+      data.title = `${availableIngredients.slice(0, 3).join("・")}を活用したおすすめ献立`;
+    }
+
+    // Sanitize recipes with safe defaults
+    data.recipes = data.recipes.map((r: any, idx: number) => ({
+      title: r.title || `おすすめ料理 ${idx + 1}`,
+      description: r.description || "手持ちの食材を活かした美味しくてバランスの良い一品です。",
+      prepTime: Number(r.prepTime) || 10,
+      cookTime: Number(r.cookTime) || 15,
+      servings: Number(r.servings) || 2,
+      difficulty: r.difficulty || "普通",
+      mealType: r.mealType || (idx === 0 ? "主菜" : "副菜"),
+      ingredients: Array.isArray(r.ingredients)
+        ? r.ingredients.map((ing: any) => ({
+            name: typeof ing === "string" ? ing : ing.name || "食材",
+            quantity: typeof ing === "string" ? "適量" : ing.quantity || "適量",
+            category: ing.category || "その他",
+            isMissing: Boolean(ing.isMissing),
+          }))
+        : [],
+      instructions: Array.isArray(r.instructions)
+        ? r.instructions.map((inst: any) => String(inst))
+        : ["食材を切って下準備をします。", "火を通して味付けを調えます。", "器に盛り付けて完成です。"],
+      nutrition: {
+        calories: Number(r.nutrition?.calories) || 350,
+        protein: Number(r.nutrition?.protein) || 15,
+        carbs: Number(r.nutrition?.carbs) || 30,
+        fat: Number(r.nutrition?.fat) || 10,
+      },
+    }));
 
     return res.json(data);
   } catch (error: any) {

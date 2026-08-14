@@ -235,6 +235,9 @@ export default function App() {
         data = JSON.parse(responseText);
       } catch (jsonErr) {
         console.error("Client JSON parse error:", jsonErr, "Response text:", responseText);
+        if (!response.ok) {
+          throw new Error(`サーバーエラー (${response.status}) が発生しました。しばらく待ってから再試行してください。`);
+        }
         throw new Error(
           "AI応答データの形式解析エラーが発生しました。一時的な不整合の可能性があります。下の『再試行する』ボタンを押してもう一度お試しください。"
         );
@@ -244,7 +247,7 @@ export default function App() {
         if (data?.requiresApiKey || response.status === 401) {
           setIsApiKeyModalOpen(true);
         }
-        throw new Error(data?.error || "献立の生成中に通信エラーが発生しました。もう一度お試しください。");
+        throw new Error(data?.error || `通信エラー (${response.status}) が発生しました。もう一度お試しください。`);
       }
 
       if (!data || !data.title || !Array.isArray(data.recipes) || data.recipes.length === 0) {
