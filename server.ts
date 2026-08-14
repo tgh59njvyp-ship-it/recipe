@@ -9,7 +9,19 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+// Enable CORS and JSON body parsing
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, x-api-key");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Dynamically retrieve GoogleGenAI client using request header/body or process.env.GEMINI_API_KEY or embedded fallback key
 const DEFAULT_FALLBACK_KEY = Buffer.from(
@@ -18,7 +30,10 @@ const DEFAULT_FALLBACK_KEY = Buffer.from(
 ).toString("utf-8");
 
 function getAIClient(clientApiKey?: string) {
-  const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY?.trim() || DEFAULT_FALLBACK_KEY;
+  const trimmed = clientApiKey?.trim();
+  const apiKey = (trimmed && trimmed.length > 10)
+    ? trimmed
+    : (process.env.GEMINI_API_KEY?.trim() || DEFAULT_FALLBACK_KEY);
   if (!apiKey) return null;
 
   return new GoogleGenAI({
@@ -26,9 +41,14 @@ function getAIClient(clientApiKey?: string) {
   });
 }
 
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
+
 // Helper to attempt generation with valid modern Gemini models and automatic schema fallbacks
 async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
-  const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  const candidateModels = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
   let lastError: any = null;
 
   // First pass: try with structured output schema
