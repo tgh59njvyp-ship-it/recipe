@@ -83,7 +83,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSav
             Google AI StudioのAPIキーを入力すると、この端末のブラウザ（localStorage）に安全に保存され、公開サイト上でも制限なくAI献立が生成できるようになります。
           </p>
           <p className="text-[11px] text-emerald-800/80 bg-emerald-100/50 p-2 rounded-xl">
-            💡 <strong>APIキーの形式:</strong> <code>AIzaSy...</code> で始まる文字列です（Google AI Studioで無料・1分で発行できます）。
+            💡 <strong>APIキーの形式:</strong> 最新の <code>AQ...</code> 形式または <code>AIzaSy...</code> 形式のどちらにも完全対応しています。
           </p>
           <a
             href="https://aistudio.google.com/app/apikey"
@@ -91,7 +91,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSav
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-emerald-700 font-bold underline hover:text-emerald-900 pt-1"
           >
-            <span>Google AI Studioで無料APIキーを取得する（無料）</span>
+            <span>Google AI StudioでAPIキーを取得する（無料）</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
@@ -100,14 +100,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSav
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-stone-700 mb-1.5">
-              Gemini API Key (AIzaSy...)
+              Gemini API Key（AQ... または AIzaSy...）
             </label>
             <div className="relative">
               <input
                 type={showKey ? "text" : "password"}
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="AIzaSy..."
+                placeholder="AQ... または AIzaSy..."
                 className="w-full pl-3.5 pr-10 py-2.5 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-mono"
                 id="input-gemini-api-key"
               />

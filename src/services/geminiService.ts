@@ -5,7 +5,7 @@ import { buildFallbackMealPlan } from "./recipePresets";
 export function getEffectiveApiKey(customKey?: string): string {
   const localKey = (typeof window !== "undefined" ? localStorage.getItem("gemini_api_key") : null)?.trim();
   const candidate = customKey?.trim() || localKey;
-  if (candidate && candidate.length > 5 && !candidate.startsWith("AQ.")) {
+  if (candidate && candidate.length > 5) {
     return candidate;
   }
   return "";
@@ -19,6 +19,44 @@ export interface GeneratePlanParams {
   mealType: string;
   additionalNotes?: string;
   apiKey?: string;
+}
+
+async function generateWithREST(apiKey: string, prompt: string, schema?: any): Promise<string> {
+  const candidateModels = ["gemini-2.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const body: any = {
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          ...(schema ? { responseSchema: schema } : {}),
+        },
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      }
+    } catch (e) {
+      console.warn(`REST call failed for ${model}:`, e);
+    }
+  }
+  return "";
 }
 
 export async function generateMealPlan(params: GeneratePlanParams): Promise<{ title: string; recipes: any[]; isDemo?: boolean }> {
@@ -211,8 +249,21 @@ ${params.additionalNotes || "特になし"}
     }
   }
 
+  // If SDK failed (e.g. auth issue with AQ keys), try direct REST API
+  if (!rawText && effectiveKey) {
+    try {
+      rawText = await generateWithREST(effectiveKey, prompt);
+    } catch (e) {
+      console.warn("Direct REST fallback failed:", e);
+    }
+  }
+
   if (!rawText) {
-    throw new Error("AIから献立データを生成できませんでした。ネットワーク接続またはAPIキーをご確認ください。");
+    const fallbackData = buildFallbackMealPlan(params.availableIngredients, params.mealType, params.mealCount);
+    return {
+      ...fallbackData,
+      isDemo: true,
+    };
   }
 
   let cleanJson = rawText.trim();
@@ -365,6 +416,36 @@ ${currentMealPlan.recipes
       }
     } catch (e) {
       console.warn(`Chat model [${model}] failed:`, e);
+    }
+  }
+
+  // REST fallback for chat with AQ keys
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(effectiveKey)}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": effectiveKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: contextPrompt }],
+          },
+          contents: contents.map((c) => ({
+            role: c.role === "user" ? "user" : "model",
+            parts: [{ text: typeof c.parts === "string" ? c.parts : c.parts[0]?.text || "" }],
+          })),
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      }
+    } catch (e) {
+      console.warn(`REST chat fallback failed for ${model}:`, e);
     }
   }
 

@@ -41,8 +41,17 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
+// Config endpoint for automatic API key embedding
+app.get("/api/config", (req, res) => {
+  const envKey = process.env.GEMINI_API_KEY?.trim() || "";
+  res.json({
+    hasApiKey: !!envKey,
+    apiKey: envKey,
+  });
+});
+
 // Helper to attempt generation with valid modern Gemini models and automatic schema fallbacks
-async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
+async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }, rawApiKey?: string) {
   // Ordered by reliability and speed under high traffic
   const candidateModels = ["gemini-2.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"];
   let lastError: any = null;
@@ -84,6 +93,39 @@ async function generateContentWithFallback(ai: GoogleGenAI, configObj: { content
       } catch (err: any) {
         console.warn(`Model [${modelName}] fallback without responseSchema failed:`, err?.message || err);
         lastError = err;
+      }
+    }
+  }
+
+  // Third pass fallback: Direct REST call with ?key= query parameter (guarantees AQ... and AIza... keys work)
+  const apiKey = rawApiKey || process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    for (const modelName of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const promptText = typeof configObj.contents === "string" ? configObj.contents : JSON.stringify(configObj.contents);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: {
+              responseMimeType: "application/json",
+            },
+          }),
+        });
+        if (res.ok) {
+          const resJson: any = await res.json();
+          const text = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            return { text };
+          }
+        }
+      } catch (restErr: any) {
+        console.warn(`Direct REST pass failed on ${modelName}:`, restErr?.message || restErr);
       }
     }
   }
@@ -212,7 +254,7 @@ ${additionalNotes || "特になし"}
           required: ["title", "recipes"],
         },
       },
-    });
+    }, clientApiKey);
 
     const responseText = response.text;
     if (!responseText) {
@@ -385,7 +427,7 @@ ${contextText}
       config: {
         systemInstruction,
       },
-    });
+    }, clientApiKey);
 
     const reply = response.text || "申し訳ありません。回答を生成できませんでした。";
     return res.json({ reply });

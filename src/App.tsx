@@ -141,6 +141,22 @@ export default function App() {
     localStorage.setItem("ai_menu_ingredients", JSON.stringify(ingredients));
   }, [ingredients]);
 
+  // Automatically fetch and embed server environment API key on startup if not set in localStorage
+  useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.apiKey && !localStorage.getItem("gemini_api_key")) {
+          localStorage.setItem("gemini_api_key", data.apiKey);
+          setHasCustomApiKey(true);
+          console.info("Successfully embedded and applied environment Gemini API key.");
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch server config:", err);
+      });
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("ai_menu_active_plan", JSON.stringify(activePlan));
   }, [activePlan]);
