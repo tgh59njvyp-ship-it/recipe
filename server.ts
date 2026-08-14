@@ -21,25 +21,14 @@ function getAIClient(clientApiKey?: string) {
   const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY?.trim() || DEFAULT_FALLBACK_KEY;
   if (!apiKey) return null;
 
-  const headers: Record<string, string> = {
-    "User-Agent": "aistudio-build",
-  };
-
-  if (apiKey.startsWith("AQ.") || apiKey.startsWith("ya29.")) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
-  }
-
   return new GoogleGenAI({
     apiKey,
-    httpOptions: {
-      headers,
-    },
   });
 }
 
 // Helper to attempt generation with valid modern Gemini models and automatic schema fallbacks
 async function generateContentWithFallback(ai: GoogleGenAI, configObj: { contents: any; config?: any }) {
-  const candidateModels = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
   let lastError: any = null;
 
   // First pass: try with structured output schema
