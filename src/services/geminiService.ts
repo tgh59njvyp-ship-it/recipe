@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { MealPlan, Recipe, ShoppingItem } from "../types";
+import { buildFallbackMealPlan } from "./recipePresets";
 
 export function getEffectiveApiKey(customKey?: string): string {
   const localKey = (typeof window !== "undefined" ? localStorage.getItem("gemini_api_key") : null)?.trim();
@@ -20,7 +21,7 @@ export interface GeneratePlanParams {
   apiKey?: string;
 }
 
-export async function generateMealPlan(params: GeneratePlanParams): Promise<{ title: string; recipes: any[] }> {
+export async function generateMealPlan(params: GeneratePlanParams): Promise<{ title: string; recipes: any[]; isDemo?: boolean }> {
   const effectiveKey = getEffectiveApiKey(params.apiKey);
 
   // 1. First try server endpoint
@@ -42,16 +43,22 @@ export async function generateMealPlan(params: GeneratePlanParams): Promise<{ ti
     } else {
       const errJson = await response.json().catch(() => null);
       if (errJson?.requiresApiKey || response.status === 401) {
-        const err: any = new Error(errJson?.error || "Gemini APIキーが必要です。画面右上の『🔑 APIキー設定』から設定してください。");
-        err.requiresApiKey = true;
-        throw err;
+        // If server requires API key and client doesn't have one, generate smart recipe template smoothly
+        if (!effectiveKey) {
+          console.info("No API key available, using smart chef template engine.");
+          const fallbackData = buildFallbackMealPlan(params.availableIngredients, params.mealType, params.mealCount);
+          return {
+            ...fallbackData,
+            isDemo: true,
+          };
+        }
       }
       if (errJson?.error) {
         throw new Error(errJson.error);
       }
     }
   } catch (serverErr: any) {
-    if (serverErr?.requiresApiKey || (serverErr?.message && (serverErr.message.includes("食材を1つ以上") || serverErr.message.includes("APIキー")))) {
+    if (serverErr?.message && serverErr.message.includes("食材を1つ以上")) {
       throw serverErr;
     }
     console.warn("Server API returned error. Trying client-side fallback if key is present:", serverErr);
@@ -59,9 +66,12 @@ export async function generateMealPlan(params: GeneratePlanParams): Promise<{ ti
 
   // 2. Client-side fallback with @google/genai if a client key is available
   if (!effectiveKey) {
-    const err: any = new Error("Gemini APIキー（AIzaSy...）が必要です。画面右上の『🔑 APIキー設定』からGoogle AI Studioで取得したAPIキーを入力してください。");
-    err.requiresApiKey = true;
-    throw err;
+    // Gracefully provide high-quality recipe plan tailored to user's ingredients
+    const fallbackData = buildFallbackMealPlan(params.availableIngredients, params.mealType, params.mealCount);
+    return {
+      ...fallbackData,
+      isDemo: true,
+    };
   }
 
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
@@ -300,7 +310,15 @@ export async function askChefChat(
   // Client-side fallback
   const effectiveKey = getEffectiveApiKey(apiKey);
   if (!effectiveKey) {
-    throw new Error("Gemini APIキーが設定されていません。");
+    // Helpful immediate advice from AI chef assistant without crashing
+    const lower = message.toLowerCase();
+    if (lower.includes("代用") || lower.includes("ない")) {
+      return "食材の代用についてですね！例えば、みりんがない場合は【砂糖＋酒（1:3）】、生クリームがない場合は【牛乳＋バター】で代用できます。Google AI Studioで無料のGemini APIキーを設定していただくと、すべての食材に対するより詳しい即答アドバイスが可能です！";
+    }
+    if (lower.includes("保存") || lower.includes("冷凍") || lower.includes("日持ち")) {
+      return "食材の保存についてですね！キャベツや白菜は芯をくり抜いて濡らしたキッチンペーパーを詰めると長持ちします。お肉は小分けにしてラップで密閉し冷凍するのがおすすめです。画面右上の『🔑 APIキー設定』にGemini APIキーを保存していただくと、AIシェフが個別の食材ごとに最適な保存期間と解凍のコツをお答えします！";
+    }
+    return `ご質問ありがとうございます！「${message}」についてですね。手持ちの食材に合わせて美味しく調理するポイントは、火加減と調味料を入れるタイミングです。画面右上の『🔑 APIキー設定』からGoogle AI Studioの無料キーを設定していただくと、プロの料理人レベルの詳しい解説とアレンジ提案がリアルタイムで受け取れます！`;
   }
 
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
