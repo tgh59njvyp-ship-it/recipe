@@ -54,3 +54,12 @@ export interface SavedShoppingList {
   items: ShoppingItem[];
 }
 
+export interface FridgeItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity?: string;
+  expiryDate?: string; // YYYY-MM-DD
+  addedDate: string;
+}
+

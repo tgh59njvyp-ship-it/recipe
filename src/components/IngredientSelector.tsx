@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Plus, X, Carrot, Drumstick, Egg, Leaf, Apple, Fish, Flame } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, X, Carrot, Drumstick, Egg, Leaf, Apple, Fish, Flame, Mic, MicOff } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface IngredientSelectorProps {
@@ -34,6 +34,53 @@ export default function IngredientSelector({
   onClear,
 }: IngredientSelectorProps) {
   const [inputValue, setInputValue] = useState("");
+  const [isListening, setIsListening] = useState(false);
+
+  const startVoiceInput = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("お使いのブラウザは音声入力に対応していません。テキスト入力をご利用ください。");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setIsListening(true);
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          // split by whitespace or japanese punctuation
+          const words = transcript.split(/[\s,、　]+/);
+          words.forEach((w: string) => {
+            const clean = w.trim();
+            if (clean && !ingredients.includes(clean)) {
+              onAdd(clean);
+            }
+          });
+        }
+        setIsListening(false);
+      };
+
+      recognition.onerror = (err: any) => {
+        console.warn("Speech recognition error:", err);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (e) {
+      console.warn("Speech recognition exception:", e);
+      setIsListening(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,16 +109,30 @@ export default function IngredientSelector({
         )}
       </div>
 
-      {/* Input Form */}
+      {/* Input Form with Voice Button */}
       <form onSubmit={handleSubmit} className="flex gap-2 mb-6" id="form-ingredient-input">
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder="例: 豚バラ肉、レタス、アボカド"
-          className="flex-1 px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm placeholder-stone-400 transition-all bg-stone-50/50"
-          id="input-ingredient-name"
-        />
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="例: 豚バラ肉、レタス、アボカド"
+            className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm placeholder-stone-400 transition-all bg-stone-50/50"
+            id="input-ingredient-name"
+          />
+          <button
+            type="button"
+            onClick={startVoiceInput}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all cursor-pointer ${
+              isListening
+                ? "bg-rose-500 text-white animate-pulse"
+                : "text-stone-400 hover:text-emerald-600 hover:bg-stone-100"
+            }`}
+            title="音声で食材を入力 (喋るだけ)"
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+        </div>
         <button
           type="submit"
           className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-sm transition-all hover:shadow-sm flex items-center gap-1 cursor-pointer shrink-0"

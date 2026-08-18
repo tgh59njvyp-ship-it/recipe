@@ -18,6 +18,7 @@ import {
   History as HistoryIcon,
   Bot,
   Key,
+  Refrigerator,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -29,6 +30,7 @@ import HistoryList from "./components/HistoryList";
 import { RecipeChat } from "./components/RecipeChat";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ApiKeyModal } from "./components/ApiKeyModal";
+import { FridgePantryModal } from "./components/FridgePantryModal";
 import { generateMealPlan } from "./services/geminiService";
 
 const DIETARY_TAGS = [
@@ -91,9 +93,10 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Chat Drawer state & API Key Modal state
+  // Chat Drawer state & ApiKey Modal & Fridge Pantry Modal state
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [isFridgeModalOpen, setIsFridgeModalOpen] = useState(false);
   const [hasCustomApiKey, setHasCustomApiKey] = useState(() => !!localStorage.getItem("gemini_api_key"));
 
   // Loaded/Active meal plan
@@ -471,6 +474,15 @@ export default function App() {
 
           <div className="hidden sm:flex items-center gap-2">
             <button
+              onClick={() => setIsFridgeModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/80 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              id="btn-header-fridge"
+              title="マイ冷蔵庫・パントリー管理"
+            >
+              <Refrigerator className="w-3.5 h-3.5 text-blue-600" />
+              <span>マイ冷蔵庫</span>
+            </button>
+            <button
               onClick={() => setIsApiKeyModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl text-xs font-bold transition-all cursor-pointer"
               id="btn-header-apikey"
@@ -507,6 +519,113 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Input Panel (Col span 5 on desktop) */}
             <div className="lg:col-span-5 space-y-6">
+              {/* One-Tap Goal Presets for instant setup */}
+              <div className="bg-white rounded-2xl border border-stone-200/80 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-stone-800 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>ワンタップおすすめ設定（忙しい時に）</span>
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-medium">タップで自動入力</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    {
+                      title: "🚀 爆速10分時短",
+                      desc: "豚肉, キャベツ",
+                      ings: ["豚肉", "キャベツ"],
+                      type: "夕食",
+                      count: 2,
+                      tags: ["時短 (15分以内)"],
+                      style: "和風",
+                    },
+                    {
+                      title: "🥦 高タンパクヘルシー",
+                      desc: "鶏肉, 豆腐, 卵",
+                      ings: ["鶏肉", "豆腐", "卵"],
+                      type: "夕食",
+                      count: 2,
+                      tags: ["ヘルシー・低カロリー", "高タンパク"],
+                      style: "和風",
+                    },
+                    {
+                      title: "💰 節約・コスパ抜群",
+                      desc: "もやし, 豆腐, 豚肉",
+                      ings: ["もやし", "豆腐", "豚肉"],
+                      type: "夕食",
+                      count: 2,
+                      tags: ["節約・コスパ重視"],
+                      style: "中華",
+                    },
+                    {
+                      title: "🧒 子供がパクパク",
+                      desc: "じゃがいも, 人参, 豚肉",
+                      ings: ["じゃがいも", "人参", "豚肉"],
+                      type: "夕食",
+                      count: 2,
+                      tags: ["子供が喜ぶ味付け"],
+                      style: "洋風",
+                    },
+                    {
+                      title: "🍺 晩酌おつまみ",
+                      desc: "鶏肉, 豆腐",
+                      ings: ["鶏肉", "豆腐"],
+                      type: "お酒のアテ",
+                      count: 2,
+                      tags: ["お酒のおつまみ"],
+                      style: "居酒屋風",
+                    },
+                    {
+                      title: "🍱 弁当作り置き",
+                      desc: "豚肉, 人参, 卵",
+                      ings: ["豚肉", "人参", "卵"],
+                      type: "お弁当",
+                      count: 2,
+                      tags: ["作り置き・お弁当可"],
+                      style: "和風",
+                    },
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setIngredients(preset.ings);
+                        setMealType(preset.type);
+                        setMealCount(preset.count);
+                        setSelectedTags(preset.tags);
+                        setSelectedStyle(preset.style);
+                      }}
+                      className="p-2.5 rounded-xl border border-stone-200/80 bg-stone-50/50 hover:bg-emerald-50/60 hover:border-emerald-300 transition-all text-left group cursor-pointer"
+                    >
+                      <span className="block text-xs font-bold text-stone-800 group-hover:text-emerald-800">
+                        {preset.title}
+                      </span>
+                      <span className="block text-[10px] text-stone-400 mt-0.5 font-mono">
+                        {preset.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fridge Pantry Quick Action Banner */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 p-3.5 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-600 text-white rounded-xl">
+                    <Refrigerator className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-blue-900 block">マイ冷蔵庫ストック連携</span>
+                    <span className="text-[10px] text-blue-700">賞味期限が近い食材を一括選択できます</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsFridgeModalOpen(true)}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+                >
+                  冷蔵庫から選択
+                </button>
+              </div>
+
               {/* 1. Ingredient Input */}
               <IngredientSelector
                 ingredients={ingredients}
@@ -905,6 +1024,16 @@ export default function App() {
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
         onSaved={() => setHasCustomApiKey(!!localStorage.getItem("gemini_api_key"))}
+      />
+
+      {/* Fridge & Pantry Stock Modal */}
+      <FridgePantryModal
+        isOpen={isFridgeModalOpen}
+        onClose={() => setIsFridgeModalOpen(false)}
+        onSelectForMealPlan={(selectedIngredients) => {
+          setIngredients(selectedIngredients);
+          setActiveTab("generator");
+        }}
       />
     </div>
   );
